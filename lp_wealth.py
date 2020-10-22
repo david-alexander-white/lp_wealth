@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-import matplotlib.pyplot as plt
+import brownian_bridge_extrema
 
 
 def get_standard_brownian_motion(num_samples, num_steps, step_size):
