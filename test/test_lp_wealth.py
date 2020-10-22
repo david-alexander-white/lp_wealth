@@ -33,14 +33,32 @@ def test_calculate_reserve_changes():
               num_samples=3
               )
 
-    # We're going to pass in a Brownian Motion step that will send our log
+    # We're going to pass in a noise realization that will send our log
     # price to exactly where we want it
-    brownian_motion_step = torch.log(torch.tensor([1., 1/16, 1/16]))
-    log_r_alpha, log_r_beta = sim.calculate_reserve_update(brownian_motion_step, False)
+    fake_noise = torch.log(torch.tensor([1., 1/16, 1/16]))
+    log_r_alpha, log_r_beta = sim.calculate_reserve_update(fake_noise, False)
 
     # No price change in sample 1, in sample 2 gamma is too high, in sample 3 we finally do something
-    assert np.allclose(torch.exp(log_r_alpha), torch.tensor([1.,1.,4.]))
-    assert np.allclose(torch.exp(log_r_beta), torch.tensor([1.,1.,.5]))
+    assert np.allclose(torch.exp(log_r_alpha), torch.tensor([1., 1., 4.]))
+    assert np.allclose(torch.exp(log_r_beta), torch.tensor([1., 1., .5]))
+
+    # Applying our Brownian Bridge adjustment has big effects because our sigma and time step are both big
+    # To avoid inequality figdgetyness
+    sim.log_market_price += 0.0000001
+    adjusted_log_r_alpha, adjusted_log_r_beta = sim.calculate_reserve_update(fake_noise, True)
+    r_alpha = torch.exp(adjusted_log_r_alpha)
+    r_beta = torch.exp(adjusted_log_r_beta)
+
+    # Sample 1 assumes the price went up between observations (b/c of our fidgetyness adjustment above)
+    # So we end up selling some alpha
+    assert r_alpha[0] < 1
+    assert r_beta[0] > 1
+    # Sample 2, price went way down, but gamma still too high
+    assert r_alpha[1] == 1
+    assert r_beta[1] == 1
+    # Sample 3, price goes down more than without the adjustment
+    assert r_alpha[2] > 4
+    assert r_beta[2] < 0.5
 
 
 if __name__ == "__main__":

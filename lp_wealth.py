@@ -18,17 +18,21 @@ class Sim:
         self.log_r_alpha = torch.zeros(self.num_samples)
         self.log_r_beta = torch.zeros(num_samples)
 
-    def get_next_brownian_motion_step(self):
-        return torch.randn(self.num_samples) * np.sqrt(self.time_step_size)
+        # For testing
+        self.last_normal_noise = None
+        self.last_expected_log_market_price = None
 
-    def get_log_market_price_step(self, brownian_motion_step):
-        return (self.mu - self.sigma**2 / 2) * self.time_step_size + self.sigma * brownian_motion_step
+    def get_next_normal_noise(self):
+        return torch.randn(self.num_samples)
 
-    def step_time(self):
+    def get_log_market_price_step(self, normal_noise):
+        return (self.mu - self.sigma**2 / 2) * self.time_step_size + self.sigma * normal_noise * np.sqrt(self.time_step_size)
 
-        brownian_motion_step = self.get_next_brownian_motion_step()
+    def step_time(self, use_brownian_bridge_adjustment=True):
 
-        log_r_alpha_updated, log_r_beta_updated = self.calculate_reserve_update(brownian_motion_step)
+        normal_noise = self.get_next_normal_noise()
+
+        log_r_alpha_updated, log_r_beta_updated = self.calculate_reserve_update(normal_noise, use_brownian_bridge_adjustment=use_brownian_bridge_adjustment)
 
         # Updates
         self.step += 1
@@ -36,21 +40,25 @@ class Sim:
         self.log_r_alpha = log_r_alpha_updated
         self.log_r_beta = log_r_beta_updated
 
-        self.log_market_price += self.get_log_market_price_step(brownian_motion_step)
+        self.log_market_price += self.get_log_market_price_step(normal_noise)
 
-    def calculate_reserve_update(self, brownian_motion_step, use_brownian_bridge_adjustment=True):
+    def calculate_reserve_update(self, normal_noise, use_brownian_bridge_adjustment=True):
         log_m_u = self.log_r_beta - self.log_r_alpha
 
         if use_brownian_bridge_adjustment:
-            # If m_u is currently above m_p, then if m_p dropped in between the last sample and now, it could have caused an arb
+            # If m_u ends up above m_p, then if m_p dropped in between the last sample and now, it could have caused an arb
             # and vice versa
-            brownian_motion_step = torch.where(
-                log_m_u > self.log_market_price,
-                brownian_bridge_extrema.get_expected_brownian_bridge_min(torch.tensor(0.), self.time_step_size, torch.tensor(0.), brownian_motion_step),
-                brownian_bridge_extrema.get_expected_brownian_bridge_max(torch.tensor(0.), self.time_step_size, torch.tensor(0.), brownian_motion_step),
+            normal_noise = torch.where(
+                log_m_u > self.log_market_price + self.get_log_market_price_step(normal_noise),
+                brownian_bridge_extrema.get_expected_brownian_bridge_min(torch.tensor(0.), 1, torch.tensor(0.), normal_noise),
+                brownian_bridge_extrema.get_expected_brownian_bridge_max(torch.tensor(0.), 1, torch.tensor(0.), normal_noise),
             )
 
-        expected_log_market_price = self.log_market_price + self.get_log_market_price_step(brownian_motion_step)
+        expected_log_market_price = self.log_market_price + self.get_log_market_price_step(normal_noise)
+
+        # For testing
+        self.last_normal_noise = normal_noise
+        self.last_expected_log_market_price = expected_log_market_price
 
         log_gamma = torch.log(self.gamma)
 
