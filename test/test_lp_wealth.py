@@ -35,6 +35,10 @@ def test_calculate_reserve_changes(cuda=False):
               cuda=cuda
               )
 
+    # Adjust initial reserves for simplicity
+    sim.log_r_alpha *= 0
+    sim.log_r_beta *= 0
+
     # We're going to pass in a noise realization that will send our log
     # price to exactly where we want it
     fake_noise = torch.log(torch.tensor([1., 1/16, 1/16]))

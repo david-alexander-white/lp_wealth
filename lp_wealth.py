@@ -26,9 +26,13 @@ class Sim:
         self.num_samples = num_samples
 
         self.log_gamma = torch.log(self.gamma)
+
+        # Log market price 0 ==> market price 1
         self.log_market_price = torch.zeros(self.num_samples, device=mu.device)
-        self.log_r_alpha = torch.zeros(self.num_samples, device=mu.device)
-        self.log_r_beta = torch.zeros(num_samples, device=mu.device)
+
+        # We initialize our reserves so that our initial wealth is 1
+        self.log_r_alpha = torch.log(.5 * torch.ones(self.num_samples, device=mu.device))
+        self.log_r_beta = torch.log(.5 * torch.ones(num_samples, device=mu.device))
 
         # For testing
         self.last_normal_noise = None
@@ -115,4 +119,7 @@ class Sim:
         scaled_log_wealth = torch.log(scaled_wealth)
 
         return scaled_log_wealth + self.log_r_beta
+
+    def compute_wealth_growth_rate(self):
+        return self.compute_log_wealth() / (self.step * self.time_step_size)
 
