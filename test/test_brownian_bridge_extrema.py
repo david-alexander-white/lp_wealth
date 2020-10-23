@@ -41,9 +41,49 @@ def test_get_expected_brownian_bridge_min():
                                            torch.tensor(-2.))
     assert torch.abs(ans + 2.307) < 0.04
 
+def test_max_sample():
+    end_time = torch.ones(10000)
+    end_point = torch.zeros(10000)
+    sample = brownian_bridge_max_starting_from_zero_sample(end_time, end_point)
+    ans = get_expected_brownian_bridge_max_starting_from_0_and_ending_at_or_above_0(torch.tensor(1.), torch.tensor(0.))
+    assert(np.abs(torch.mean(sample) - ans) < 0.01)
+
+    end_time = torch.ones(10000)
+    end_point = torch.ones(10000)
+    sample = brownian_bridge_max_starting_from_zero_sample(end_time, end_point)
+    ans = get_expected_brownian_bridge_max_starting_from_0_and_ending_at_or_above_0(torch.tensor(1.), torch.tensor(1.))
+    assert (np.abs(torch.mean(sample) - ans) < 0.01)
+
+    end_time = torch.ones(10000)
+    end_point = -1 * torch.ones(10000)
+    sample = brownian_bridge_max_starting_from_zero_sample(end_time, end_point)
+    ans = get_expected_brownian_bridge_max_starting_from_0(torch.tensor(1.), torch.tensor(-1.))
+    assert (np.abs(torch.mean(sample) - ans) < 0.01)
+
+def test_min_sample():
+    end_time = torch.ones(10000)
+    end_point = torch.zeros(10000)
+    sample = brownian_bridge_min_starting_from_zero_sample(end_time, end_point)
+    ans = get_expected_brownian_bridge_min(torch.tensor(0.), torch.tensor(1.), torch.tensor(0.), torch.tensor(0.))
+    assert(np.abs(torch.mean(sample) - ans) < 0.01)
+
+    end_time = torch.ones(10000)
+    end_point = torch.ones(10000)
+    sample = brownian_bridge_min_starting_from_zero_sample(end_time, end_point)
+    ans = get_expected_brownian_bridge_min(torch.tensor(0.), torch.tensor(1.), torch.tensor(0.), torch.tensor(1.))
+    assert (np.abs(torch.mean(sample) - ans) < 0.01)
+
+    end_time = torch.ones(10000)
+    end_point = -1 * torch.ones(10000)
+    sample = brownian_bridge_min_starting_from_zero_sample(end_time, end_point)
+    ans = get_expected_brownian_bridge_min(torch.tensor(0.), torch.tensor(1.), torch.tensor(0.), torch.tensor(-1.))
+    assert (np.abs(torch.mean(sample) - ans) < 0.01)
+
 
 
 if __name__ == "__main__":
     test_get_expected_brownian_bridge_max()
     test_get_expected_brownian_bridge_min()
+    test_max_sample()
+    test_min_sample()
 

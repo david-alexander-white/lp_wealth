@@ -41,7 +41,7 @@ def test_calculate_reserve_changes(cuda=False):
     if cuda:
         fake_noise = fake_noise.cuda()
 
-    log_r_alpha, log_r_beta = sim.calculate_reserve_update(fake_noise, False)
+    log_r_alpha, log_r_beta = sim.calculate_reserve_update(fake_noise, "none")
 
     # No price change in sample 1, in sample 2 gamma is too high, in sample 3 we finally do something
     assert np.allclose(torch.exp(log_r_alpha).cpu(), torch.tensor([1., 1., 4.]))
@@ -50,10 +50,15 @@ def test_calculate_reserve_changes(cuda=False):
     # Applying our Brownian Bridge adjustment has big effects because our sigma and time step are both big
     # To avoid inequality figdgetyness
     sim.log_market_price += 0.0000001
-    adjusted_log_r_alpha, adjusted_log_r_beta = sim.calculate_reserve_update(fake_noise, True)
+
+    check_bb_adjustment(fake_noise, sim, 'expected')
+    check_bb_adjustment(fake_noise, sim, 'sample')
+
+
+def check_bb_adjustment(fake_noise, sim, adjustment_type):
+    adjusted_log_r_alpha, adjusted_log_r_beta = sim.calculate_reserve_update(fake_noise, adjustment_type)
     r_alpha = torch.exp(adjusted_log_r_alpha)
     r_beta = torch.exp(adjusted_log_r_beta)
-
     # Sample 1 assumes the price went up between observations (b/c of our fidgetyness adjustment above)
     # So we end up selling some alpha
     assert r_alpha[0] < 1

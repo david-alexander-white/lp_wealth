@@ -33,11 +33,11 @@ class Sim:
     def get_log_market_price_step(self, normal_noise):
         return (self.mu - self.sigma**2 / 2) * self.time_step_size + self.sigma * normal_noise * torch.sqrt(self.time_step_size)
 
-    def step_time(self, use_brownian_bridge_adjustment=True):
+    def step_time(self, brownian_bridge_adjustment="sample"):
 
         normal_noise = self.get_next_normal_noise()
 
-        log_r_alpha_updated, log_r_beta_updated = self.calculate_reserve_update(normal_noise, use_brownian_bridge_adjustment=use_brownian_bridge_adjustment)
+        log_r_alpha_updated, log_r_beta_updated = self.calculate_reserve_update(normal_noise, brownian_bridge_adjustment=brownian_bridge_adjustment)
 
         # Updates
         self.step += 1
@@ -47,17 +47,28 @@ class Sim:
 
         self.log_market_price += self.get_log_market_price_step(normal_noise)
 
-    def calculate_reserve_update(self, normal_noise, use_brownian_bridge_adjustment=True):
+    def calculate_reserve_update(self, raw_normal_noise, brownian_bridge_adjustment="sample"):
         log_m_u = self.log_r_beta - self.log_r_alpha
 
-        if use_brownian_bridge_adjustment:
+        if brownian_bridge_adjustment == 'sample':
+            normal_noise = torch.where(
+                log_m_u > self.log_market_price + self.get_log_market_price_step(raw_normal_noise),
+                brownian_bridge_extrema.brownian_bridge_min_starting_from_zero_sample(torch.tensor(1., device=raw_normal_noise.device), raw_normal_noise),
+                brownian_bridge_extrema.brownian_bridge_max_starting_from_zero_sample(torch.tensor(1., device=raw_normal_noise.device), raw_normal_noise),
+            )
+        elif brownian_bridge_adjustment == 'expected':
             # If m_u ends up above m_p, then if m_p dropped in between the last sample and now, it could have caused an arb
             # and vice versa
+            zero = torch.tensor(0., device=raw_normal_noise.device)
             normal_noise = torch.where(
-                log_m_u > self.log_market_price + self.get_log_market_price_step(normal_noise),
-                brownian_bridge_extrema.get_expected_brownian_bridge_min(torch.tensor(0.), 1, torch.tensor(0.), normal_noise),
-                brownian_bridge_extrema.get_expected_brownian_bridge_max(torch.tensor(0.), 1, torch.tensor(0.), normal_noise),
+                log_m_u > self.log_market_price + self.get_log_market_price_step(raw_normal_noise),
+                brownian_bridge_extrema.get_expected_brownian_bridge_min(zero, 1, zero, raw_normal_noise),
+                brownian_bridge_extrema.get_expected_brownian_bridge_max(zero, 1, zero, raw_normal_noise),
             )
+        elif brownian_bridge_adjustment == 'none':
+            normal_noise = raw_normal_noise
+        else:
+            raise Exception("unknown brownian bridge adjustment")
 
         expected_log_market_price = self.log_market_price + self.get_log_market_price_step(normal_noise)
 
