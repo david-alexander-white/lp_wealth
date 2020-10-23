@@ -3,8 +3,8 @@ from lp_wealth import *
 
 
 def test_log_market_price(cuda=False):
-    mu = torch.tensor(3)
-    sigma = torch.tensor(2)
+    mu = torch.tensor(3.)
+    sigma = torch.tensor(2.)
     time_step_size = torch.tensor(1/100)
     sim = Sim(mu, sigma, torch.tensor(1.), time_step_size, 10000, cuda=cuda)
 
@@ -70,7 +70,26 @@ def check_bb_adjustment(fake_noise, sim, adjustment_type):
     assert r_alpha[2] > 4
     assert r_beta[2] < 0.5
 
+def test_compute_log_wealth():
+    mu = torch.tensor(3)
+    sigma = torch.tensor(2)
+    time_step_size = torch.tensor(1 / 100)
+    sim = Sim(mu, sigma, torch.tensor(1.), time_step_size, 10000)
+
+    fake_price = torch.tensor([1.,2,3])
+    fake_alpha = torch.tensor([4.,5,6])
+    fake_beta = torch.tensor([7.,8,9])
+
+    sim.log_market_price = torch.log(fake_price)
+    sim.log_r_alpha = torch.log(fake_alpha)
+    sim.log_r_beta = torch.log(fake_beta)
+
+    res = sim.compute_log_wealth()
+    assert torch.allclose(torch.exp(res), fake_price * fake_alpha + fake_beta)
+
+
 
 if __name__ == "__main__":
+    test_compute_log_wealth()
     test_log_market_price(True)
     test_calculate_reserve_changes(True)

@@ -102,3 +102,17 @@ class Sim:
                                          log_r_beta_updated)
         return log_r_alpha_updated, log_r_beta_updated
 
+    # Compute log(r_alpha * S + r_beta)
+    # We go through a few contortions to avoid scaling problems
+    def compute_log_wealth(self):
+        log_alpha_value = self.log_market_price + self.log_r_alpha
+
+        # Divide through by value of beta (which represents cash)
+        scaled_log_alpha_value = log_alpha_value - self.log_r_beta
+
+        scaled_wealth = torch.exp(scaled_log_alpha_value) + 1
+
+        scaled_log_wealth = torch.log(scaled_wealth)
+
+        return scaled_log_wealth + self.log_r_beta
+
