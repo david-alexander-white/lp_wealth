@@ -4,6 +4,13 @@ import brownian_bridge_extrema
 
 class Sim:
     def __init__(self, mu, sigma, gamma, time_step_size, num_samples, cuda=False):
+        # Safety
+        mu = mu.float()
+        sigma = sigma.float()
+        gamma = gamma.float()
+        time_step_size = time_step_size.float()
+
+        # Cuda
         if cuda:
             mu = mu.cuda()
             sigma = sigma.cuda()
