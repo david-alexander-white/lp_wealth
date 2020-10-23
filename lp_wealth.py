@@ -1,32 +1,37 @@
 import torch
-import numpy as np
 import brownian_bridge_extrema
 
 
 class Sim:
-    def __init__(self, mu, sigma, gamma, time_step_size, num_samples):
-        self.step = 0
+    def __init__(self, mu, sigma, gamma, time_step_size, num_samples, cuda=False):
+        if cuda:
+            mu = mu.cuda()
+            sigma = sigma.cuda()
+            gamma = gamma.cuda()
+            time_step_size = time_step_size.cuda()
 
         self.mu = mu
         self.sigma = sigma
         self.gamma = gamma
 
         self.time_step_size = time_step_size
+        self.step = 0
         self.num_samples = num_samples
 
-        self.log_market_price = torch.zeros(self.num_samples)
-        self.log_r_alpha = torch.zeros(self.num_samples)
-        self.log_r_beta = torch.zeros(num_samples)
+        self.log_gamma = torch.log(self.gamma)
+        self.log_market_price = torch.zeros(self.num_samples, device=mu.device)
+        self.log_r_alpha = torch.zeros(self.num_samples, device=mu.device)
+        self.log_r_beta = torch.zeros(num_samples, device=mu.device)
 
         # For testing
         self.last_normal_noise = None
         self.last_expected_log_market_price = None
 
     def get_next_normal_noise(self):
-        return torch.randn(self.num_samples)
+        return torch.randn(self.num_samples, device=self.mu.device)
 
     def get_log_market_price_step(self, normal_noise):
-        return (self.mu - self.sigma**2 / 2) * self.time_step_size + self.sigma * normal_noise * np.sqrt(self.time_step_size)
+        return (self.mu - self.sigma**2 / 2) * self.time_step_size + self.sigma * normal_noise * torch.sqrt(self.time_step_size)
 
     def step_time(self, use_brownian_bridge_adjustment=True):
 
@@ -60,23 +65,21 @@ class Sim:
         self.last_normal_noise = normal_noise
         self.last_expected_log_market_price = expected_log_market_price
 
-        log_gamma = torch.log(self.gamma)
-
-        log_c_l = log_gamma + expected_log_market_price - log_m_u
-        log_c_h = expected_log_market_price - log_gamma - log_m_u
+        log_c_l = self.log_gamma + expected_log_market_price - log_m_u
+        log_c_h = expected_log_market_price - self.log_gamma - log_m_u
 
         # AMM price too low
-        log_r_alpha_updated = torch.where(log_m_u < log_gamma + expected_log_market_price,
+        log_r_alpha_updated = torch.where(log_m_u < self.log_gamma + expected_log_market_price,
                                           self.log_r_alpha + log_c_l * (-1 * self.gamma / (self.gamma + 1)),
                                           self.log_r_alpha)
-        log_r_beta_updated = torch.where(log_m_u < log_gamma + expected_log_market_price,
+        log_r_beta_updated = torch.where(log_m_u < self.log_gamma + expected_log_market_price,
                                          self.log_r_beta + log_c_l * (1 / (self.gamma + 1)), self.log_r_beta)
 
         # AMM price too high
-        log_r_alpha_updated = torch.where(log_m_u > expected_log_market_price - log_gamma,
+        log_r_alpha_updated = torch.where(log_m_u > expected_log_market_price - self.log_gamma,
                                           self.log_r_alpha + log_c_h * (-1 / (self.gamma + 1)),
                                           log_r_alpha_updated)
-        log_r_beta_updated = torch.where(log_m_u > expected_log_market_price - log_gamma,
+        log_r_beta_updated = torch.where(log_m_u > expected_log_market_price - self.log_gamma,
                                          self.log_r_beta + log_c_h * (self.gamma / (self.gamma + 1)),
                                          log_r_beta_updated)
         return log_r_alpha_updated, log_r_beta_updated
