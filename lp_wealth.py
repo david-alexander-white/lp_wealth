@@ -3,7 +3,7 @@ import brownian_bridge_extrema
 
 
 class Sim:
-    def __init__(self, mu, sigma, gamma, time_step_size, num_samples, cuda=False):
+    def __init__(self, mu, sigma, gamma, time_step_size, num_samples, cuda=True):
         # Safety
         mu = mu.float()
         sigma = sigma.float()
@@ -34,6 +34,8 @@ class Sim:
         self.log_r_alpha = torch.log(.5 * torch.ones(self.num_samples, device=mu.device))
         self.log_r_beta = torch.log(.5 * torch.ones(num_samples, device=mu.device))
 
+        self.trade_count = torch.zeros(self.num_samples, device=mu.device)
+
         # For testing
         self.last_normal_noise = None
         self.last_expected_log_market_price = None
@@ -45,18 +47,20 @@ class Sim:
         return (self.mu - self.sigma**2 / 2) * self.time_step_size + self.sigma * normal_noise * torch.sqrt(self.time_step_size)
 
     def step_time(self, brownian_bridge_adjustment="sample"):
+        with torch.no_grad():
+            normal_noise = self.get_next_normal_noise()
 
-        normal_noise = self.get_next_normal_noise()
+            log_r_alpha_updated, log_r_beta_updated = self.calculate_reserve_update(normal_noise, brownian_bridge_adjustment=brownian_bridge_adjustment)
 
-        log_r_alpha_updated, log_r_beta_updated = self.calculate_reserve_update(normal_noise, brownian_bridge_adjustment=brownian_bridge_adjustment)
+            # Updates
+            self.step += 1
 
-        # Updates
-        self.step += 1
+            self.trade_count += self.log_r_alpha != log_r_alpha_updated
 
-        self.log_r_alpha = log_r_alpha_updated
-        self.log_r_beta = log_r_beta_updated
+            self.log_r_alpha = log_r_alpha_updated
+            self.log_r_beta = log_r_beta_updated
 
-        self.log_market_price += self.get_log_market_price_step(normal_noise)
+            self.log_market_price += self.get_log_market_price_step(normal_noise)
 
     def calculate_reserve_update(self, raw_normal_noise, brownian_bridge_adjustment="sample"):
         log_m_u = self.log_r_beta - self.log_r_alpha
@@ -122,4 +126,7 @@ class Sim:
 
     def compute_wealth_growth_rate(self):
         return self.compute_log_wealth() / (self.step * self.time_step_size)
+
+    def compute_trade_rate(self):
+        return self.trade_count / (self.step * self.time_step_size)
 
