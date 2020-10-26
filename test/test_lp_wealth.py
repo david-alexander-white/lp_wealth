@@ -35,21 +35,18 @@ def test_calculate_reserve_changes(cuda=False):
               cuda=cuda
               )
 
-    # Adjust initial reserves for simplicity
-    sim.log_r_alpha *= 0
-    sim.log_r_beta *= 0
-
     # We're going to pass in a noise realization that will send our log
     # price to exactly where we want it
     fake_noise = torch.log(torch.tensor([1., 1/16, 1/16]))
     if cuda:
         fake_noise = fake_noise.cuda()
 
-    log_r_alpha, log_r_beta = sim.calculate_reserve_update(fake_noise, "none")
+    log_r_alpha_low_updated, log_r_beta_low_updated, log_r_alpha_high_updated, log_r_beta_high_updated = \
+            sim.calculate_reserve_update(fake_noise, "none")
 
     # No price change in sample 1, in sample 2 gamma is too high, in sample 3 we finally do something
-    assert np.allclose(torch.exp(log_r_alpha).cpu(), torch.tensor([1., 1., 4.]))
-    assert np.allclose(torch.exp(log_r_beta).cpu(), torch.tensor([1., 1., .5]))
+    assert np.allclose(torch.exp(log_r_alpha_low_updated + log_r_alpha_high_updated).cpu(), torch.tensor([1., 1., 4.]))
+    assert np.allclose(torch.exp(log_r_beta_low_updated + log_r_beta_high_updated).cpu(), torch.tensor([1., 1., .5]))
 
     # Applying our Brownian Bridge adjustment has big effects because our sigma and time step are both big
     # To avoid inequality figdgetyness
@@ -60,9 +57,10 @@ def test_calculate_reserve_changes(cuda=False):
 
 
 def check_bb_adjustment(fake_noise, sim, adjustment_type):
-    adjusted_log_r_alpha, adjusted_log_r_beta = sim.calculate_reserve_update(fake_noise, adjustment_type)
-    r_alpha = torch.exp(adjusted_log_r_alpha)
-    r_beta = torch.exp(adjusted_log_r_beta)
+    log_r_alpha_low_updated, log_r_beta_low_updated, log_r_alpha_high_updated, log_r_beta_high_updated = \
+        sim.calculate_reserve_update(fake_noise, adjustment_type)
+    r_alpha = torch.exp(log_r_alpha_low_updated + log_r_alpha_high_updated)
+    r_beta = torch.exp(log_r_beta_low_updated + log_r_beta_high_updated)
     # Sample 1 assumes the price went up between observations (b/c of our fidgetyness adjustment above)
     # So we end up selling some alpha
     assert r_alpha[0] < 1
@@ -75,18 +73,19 @@ def check_bb_adjustment(fake_noise, sim, adjustment_type):
     assert r_beta[2] < 0.5
 
 def test_compute_log_wealth():
-    mu = torch.tensor(3)
-    sigma = torch.tensor(2)
+    num_samples=3
+    mu = torch.tensor(num_samples)
+    sigma = torch.tensor(num_samples)
     time_step_size = torch.tensor(1 / 100)
-    sim = Sim(mu, sigma, torch.tensor(1.), time_step_size, 10000)
+    sim = Sim(mu, sigma, torch.tensor(1.), time_step_size, num_samples, cuda=False)
 
     fake_price = torch.tensor([1.,2,3])
     fake_alpha = torch.tensor([4.,5,6])
     fake_beta = torch.tensor([7.,8,9])
 
     sim.log_market_price = torch.log(fake_price)
-    sim.log_r_alpha = torch.log(fake_alpha)
-    sim.log_r_beta = torch.log(fake_beta)
+    sim.initial_log_r_alpha = torch.log(fake_alpha)
+    sim.initial_log_r_beta = torch.log(fake_beta)
 
     res = sim.compute_log_wealth()
     assert torch.allclose(torch.exp(res), fake_price * fake_alpha + fake_beta)

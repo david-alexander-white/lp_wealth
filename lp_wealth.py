@@ -31,8 +31,15 @@ class Sim:
         self.log_market_price = torch.zeros(self.num_samples, device=mu.device)
 
         # We initialize our reserves so that our initial wealth is 1
-        self.log_r_alpha = torch.log(.5 * torch.ones(self.num_samples, device=mu.device))
-        self.log_r_beta = torch.log(.5 * torch.ones(num_samples, device=mu.device))
+        self.initial_log_r_alpha = torch.log(.5 * torch.ones(self.num_samples, device=mu.device))
+        self.initial_log_r_beta = torch.log(.5 * torch.ones(num_samples, device=mu.device))
+
+        # Updates
+        self.log_r_alpha_high_updates = torch.zeros(self.num_samples, device=mu.device)
+        self.log_r_alpha_low_updates = torch.zeros(self.num_samples, device=mu.device)
+
+        self.log_r_beta_high_updates = torch.zeros(self.num_samples, device=mu.device)
+        self.log_r_beta_low_updates = torch.zeros(self.num_samples, device=mu.device)
 
         self.trade_count = torch.zeros(self.num_samples, device=mu.device)
 
@@ -40,30 +47,46 @@ class Sim:
         self.last_normal_noise = None
         self.last_expected_log_market_price = None
 
-    def get_next_normal_noise(self):
-        return torch.randn(self.num_samples, device=self.mu.device)
+    def get_log_r_alpha(self):
+        return self.initial_log_r_alpha + self.log_r_alpha_high_updates + self.log_r_alpha_low_updates
+
+    def get_log_r_beta(self):
+        return self.initial_log_r_beta + self.log_r_beta_high_updates + self.log_r_beta_low_updates
+
+    def get_next_normal_noise(self, sample_style='multi'):
+        if sample_style == 'multi':
+            return torch.randn(self.num_samples, device=self.mu.device)
+        elif sample_style == 'single':
+            return torch.randn(1, device=self.mu.device)
+        else:
+            return "unknown sample style"
 
     def get_log_market_price_step(self, normal_noise):
         return (self.mu - self.sigma**2 / 2) * self.time_step_size + self.sigma * normal_noise * torch.sqrt(self.time_step_size)
 
-    def step_time(self, brownian_bridge_adjustment="sample"):
+    def step_time(self, brownian_bridge_adjustment="sample", sample_style='multi'):
         with torch.no_grad():
-            normal_noise = self.get_next_normal_noise()
+            normal_noise = self.get_next_normal_noise(sample_style)
 
-            log_r_alpha_updated, log_r_beta_updated = self.calculate_reserve_update(normal_noise, brownian_bridge_adjustment=brownian_bridge_adjustment)
+            log_r_alpha_low_updated, log_r_beta_low_updated, log_r_alpha_high_updated, log_r_beta_high_updated \
+                = self.calculate_reserve_update(normal_noise, brownian_bridge_adjustment=brownian_bridge_adjustment)
 
             # Updates
             self.step += 1
 
-            self.trade_count += self.log_r_alpha != log_r_alpha_updated
+            self.trade_count += torch.max(self.log_r_alpha_high_updates != log_r_alpha_high_updated,
+                                self.log_r_alpha_low_updates != log_r_alpha_low_updated)
 
-            self.log_r_alpha = log_r_alpha_updated
-            self.log_r_beta = log_r_beta_updated
+            self.log_r_alpha_low_updates = log_r_alpha_low_updated
+            self.log_r_alpha_high_updates = log_r_alpha_high_updated
+
+            self.log_r_beta_low_updates = log_r_beta_low_updated
+            self.log_r_beta_high_updates = log_r_beta_high_updated
 
             self.log_market_price += self.get_log_market_price_step(normal_noise)
 
     def calculate_reserve_update(self, raw_normal_noise, brownian_bridge_adjustment="sample"):
-        log_m_u = self.log_r_beta - self.log_r_alpha
+        log_m_u = self.get_log_r_beta() - self.get_log_r_alpha()
 
         if brownian_bridge_adjustment == 'sample':
             normal_noise = torch.where(
@@ -95,38 +118,41 @@ class Sim:
         log_c_h = expected_log_market_price - self.log_gamma - log_m_u
 
         # AMM price too low
-        log_r_alpha_updated = torch.where(log_m_u < self.log_gamma + expected_log_market_price,
-                                          self.log_r_alpha + log_c_l * (-1 * self.gamma / (self.gamma + 1)),
-                                          self.log_r_alpha)
-        log_r_beta_updated = torch.where(log_m_u < self.log_gamma + expected_log_market_price,
-                                         self.log_r_beta + log_c_l * (1 / (self.gamma + 1)), self.log_r_beta)
+        log_r_alpha_low_updated = torch.where(log_m_u < self.log_gamma + expected_log_market_price,
+                                          self.log_r_alpha_low_updates + log_c_l * (-1 * self.gamma / (self.gamma + 1)),
+                                          self.log_r_alpha_low_updates)
+        log_r_beta_low_updated = torch.where(log_m_u < self.log_gamma + expected_log_market_price,
+                                         self.log_r_beta_low_updates + log_c_l * (1 / (self.gamma + 1)), self.log_r_beta_low_updates)
 
         # AMM price too high
-        log_r_alpha_updated = torch.where(log_m_u > expected_log_market_price - self.log_gamma,
-                                          self.log_r_alpha + log_c_h * (-1 / (self.gamma + 1)),
-                                          log_r_alpha_updated)
-        log_r_beta_updated = torch.where(log_m_u > expected_log_market_price - self.log_gamma,
-                                         self.log_r_beta + log_c_h * (self.gamma / (self.gamma + 1)),
-                                         log_r_beta_updated)
-        return log_r_alpha_updated, log_r_beta_updated
+        log_r_alpha_high_updated = torch.where(log_m_u > expected_log_market_price - self.log_gamma,
+                                          self.log_r_alpha_high_updates + log_c_h * (-1 / (self.gamma + 1)),
+                                          self.log_r_alpha_high_updates)
+        log_r_beta_high_updated = torch.where(log_m_u > expected_log_market_price - self.log_gamma,
+                                         self.log_r_beta_high_updates + log_c_h * (self.gamma / (self.gamma + 1)),
+                                         self.log_r_beta_high_updates)
+        return log_r_alpha_low_updated, log_r_beta_low_updated, log_r_alpha_high_updated, log_r_beta_high_updated
 
     # Compute log(r_alpha * S + r_beta)
     # We go through a few contortions to avoid scaling problems
     def compute_log_wealth(self):
-        log_alpha_value = self.log_market_price + self.log_r_alpha
+        log_alpha_value = self.log_market_price + self.get_log_r_alpha()
 
         # Divide through by value of beta (which represents cash)
-        scaled_log_alpha_value = log_alpha_value - self.log_r_beta
+        scaled_log_alpha_value = log_alpha_value - self.get_log_r_beta()
 
         scaled_wealth = torch.exp(scaled_log_alpha_value) + 1
 
         scaled_log_wealth = torch.log(scaled_wealth)
 
-        return scaled_log_wealth + self.log_r_beta
+        return (scaled_log_wealth + self.get_log_r_beta()).cpu()
+
+    def compute_elapsed_time(self):
+        return (self.step * self.time_step_size).cpu()
 
     def compute_wealth_growth_rate(self):
-        return self.compute_log_wealth() / (self.step * self.time_step_size)
+        return self.compute_log_wealth() / self.compute_elapsed_time()
 
     def compute_trade_rate(self):
-        return self.trade_count / (self.step * self.time_step_size)
+        return self.trade_count.cpu() / self.compute_elapsed_time()
 
