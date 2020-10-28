@@ -61,7 +61,7 @@ def inverse_brownian_bridge_max_starting_from_zero_cdf(p, end_time, end_point):
 
 
 def brownian_bridge_max_starting_from_zero_sample(end_time, end_point):
-    base_sample = torch.rand(end_time.shape, device=end_time.device)
+    base_sample = torch.rand(end_time.shape, device=end_time.device, dtype=end_time.dtype)
     return inverse_brownian_bridge_max_starting_from_zero_cdf(base_sample, end_time, end_point)
 
 ################

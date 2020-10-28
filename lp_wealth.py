@@ -3,7 +3,7 @@ import brownian_bridge_extrema
 
 
 class Sim:
-    def __init__(self, mu, sigma, gamma, time_step_size, num_samples, cuda=True):
+    def __init__(self, mu, sigma, gamma, time_step_size, num_samples, cuda=False):
         # Safety
         mu = mu.float()
         sigma = sigma.float()
@@ -28,20 +28,20 @@ class Sim:
         self.log_gamma = torch.log(self.gamma)
 
         # Log market price 0 ==> market price 1
-        self.log_market_price = torch.zeros(self.num_samples, device=mu.device)
+        self.log_market_price = torch.zeros(self.num_samples, device=mu.device, dtype=mu.dtype)
 
         # We initialize our reserves so that our initial wealth is 1
-        self.initial_log_r_alpha = torch.log(.5 * torch.ones(self.num_samples, device=mu.device))
-        self.initial_log_r_beta = torch.log(.5 * torch.ones(num_samples, device=mu.device))
+        self.initial_log_r_alpha = torch.log(.5 * torch.ones(self.num_samples, device=mu.device, dtype=mu.dtype))
+        self.initial_log_r_beta = torch.log(.5 * torch.ones(num_samples, device=mu.device, dtype=mu.dtype))
 
         # Updates
-        self.log_r_alpha_high_updates = torch.zeros(self.num_samples, device=mu.device)
-        self.log_r_alpha_low_updates = torch.zeros(self.num_samples, device=mu.device)
+        self.log_r_alpha_high_updates = torch.zeros(self.num_samples, device=mu.device, dtype=mu.dtype)
+        self.log_r_alpha_low_updates = torch.zeros(self.num_samples, device=mu.device, dtype=mu.dtype)
 
-        self.log_r_beta_high_updates = torch.zeros(self.num_samples, device=mu.device)
-        self.log_r_beta_low_updates = torch.zeros(self.num_samples, device=mu.device)
+        self.log_r_beta_high_updates = torch.zeros(self.num_samples, device=mu.device, dtype=mu.dtype)
+        self.log_r_beta_low_updates = torch.zeros(self.num_samples, device=mu.device, dtype=mu.dtype)
 
-        self.trade_count = torch.zeros(self.num_samples, device=mu.device)
+        self.trade_count = torch.zeros(self.num_samples, device=mu.device, dtype=mu.dtype)
 
         # For testing
         self.last_normal_noise = None
@@ -55,9 +55,9 @@ class Sim:
 
     def get_next_normal_noise(self, sample_style='multi'):
         if sample_style == 'multi':
-            return torch.randn(self.num_samples, device=self.mu.device)
+            return torch.randn(self.num_samples, device=self.mu.device, dtype=self.mu.dtype)
         elif sample_style == 'single':
-            return torch.randn(1, device=self.mu.device)
+            return torch.randn(1, device=self.mu.device, dtype=self.mu.dtype)
         else:
             return "unknown sample style"
 
@@ -146,6 +146,16 @@ class Sim:
         scaled_log_wealth = torch.log(scaled_wealth)
 
         return (scaled_log_wealth + self.get_log_r_beta()).cpu()
+
+    def compute_zero_sigma_log_r_beta(self):
+        return 1/(1+self.gamma) * (torch.log(self.gamma) + self.initial_log_r_alpha + self.gamma * self.initial_log_r_beta + self.mu * self.compute_elapsed_time())
+
+    # What log wealth would be if there was no volatility
+    def compute_zero_sigma_log_wealth(self):
+        return torch.log((self.gamma + 1) / self.gamma) + \
+               1/(1 + self.gamma) * (self.log_gamma + self.initial_log_r_alpha + self.gamma * self.initial_log_r_beta + \
+                                     self.mu * self.compute_elapsed_time())
+
 
     def compute_elapsed_time(self):
         return (self.step * self.time_step_size).cpu()
