@@ -1,3 +1,3 @@
 # Solutions and simulation tools for https://www.paradigm.xyz/open-problems/index.html
 
-see open_problem_solution.ipynb
+see https://github.com/david-alexander-white/lp_wealth/blob/master/open_problem_solution.ipynb
