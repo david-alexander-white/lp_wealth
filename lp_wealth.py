@@ -148,13 +148,13 @@ class Sim:
         return (scaled_log_wealth + self.get_log_r_beta()).cpu()
 
     def compute_zero_sigma_log_r_beta(self):
-        return 1/(1+self.gamma) * (torch.log(self.gamma) + self.initial_log_r_alpha + self.gamma * self.initial_log_r_beta + self.mu * self.compute_elapsed_time())
+        return (1/(1+self.gamma) * (torch.log(self.gamma) + self.initial_log_r_alpha + self.gamma * self.initial_log_r_beta).cpu() + self.mu.cpu() * self.compute_elapsed_time())
 
     # What log wealth would be if there was no volatility
     def compute_zero_sigma_log_wealth(self):
-        return torch.log((self.gamma + 1) / self.gamma) + \
-               1/(1 + self.gamma) * (self.log_gamma + self.initial_log_r_alpha + self.gamma * self.initial_log_r_beta + \
-                                     self.mu * self.compute_elapsed_time())
+        return torch.log((self.gamma + 1) / self.gamma).cpu() + \
+               1/(1 + self.gamma).cpu() * ((self.log_gamma + self.initial_log_r_alpha + self.gamma * self.initial_log_r_beta).cpu() + \
+                                     self.mu.cpu() * self.compute_elapsed_time())
 
 
     def compute_elapsed_time(self):
