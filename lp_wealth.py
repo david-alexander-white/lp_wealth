@@ -69,7 +69,7 @@ class Sim:
             normal_noise = self.get_next_normal_noise(sample_style)
 
             log_r_alpha_low_updated, log_r_beta_low_updated, log_r_alpha_high_updated, log_r_beta_high_updated \
-                = self.calculate_reserve_update(normal_noise, brownian_bridge_adjustment=brownian_bridge_adjustment)
+                = self.calculate_reserve_update(normal_noise, brownian_bridge_adjustment=brownian_bridge_adjustment, sample_style=sample_style)
 
             # Updates
             self.step += 1
@@ -85,14 +85,14 @@ class Sim:
 
             self.log_market_price += self.get_log_market_price_step(normal_noise)
 
-    def calculate_reserve_update(self, raw_normal_noise, brownian_bridge_adjustment="sample"):
+    def calculate_reserve_update(self, raw_normal_noise, brownian_bridge_adjustment="sample", sample_style='multi'):
         log_m_u = self.get_log_r_beta() - self.get_log_r_alpha()
 
         if brownian_bridge_adjustment == 'sample':
             normal_noise = torch.where(
                 log_m_u > self.log_market_price + self.get_log_market_price_step(raw_normal_noise),
-                brownian_bridge_extrema.brownian_bridge_min_starting_from_zero_sample(torch.tensor(1., device=raw_normal_noise.device), raw_normal_noise),
-                brownian_bridge_extrema.brownian_bridge_max_starting_from_zero_sample(torch.tensor(1., device=raw_normal_noise.device), raw_normal_noise),
+                brownian_bridge_extrema.brownian_bridge_min_starting_from_zero_sample(torch.tensor(1., device=raw_normal_noise.device), raw_normal_noise, sample_style=sample_style),
+                brownian_bridge_extrema.brownian_bridge_max_starting_from_zero_sample(torch.tensor(1., device=raw_normal_noise.device), raw_normal_noise, sample_style=sample_style),
             )
         elif brownian_bridge_adjustment == 'expected':
             # If m_u ends up above m_p, then if m_p dropped in between the last sample and now, it could have caused an arb

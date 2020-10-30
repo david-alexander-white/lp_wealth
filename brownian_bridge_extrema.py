@@ -60,14 +60,19 @@ def inverse_brownian_bridge_max_starting_from_zero_cdf(p, end_time, end_point):
     return torch.where(end_point < 0, val + end_point, val)
 
 
-def brownian_bridge_max_starting_from_zero_sample(end_time, end_point):
-    base_sample = torch.rand(end_time.shape, device=end_time.device, dtype=end_time.dtype)
+def brownian_bridge_max_starting_from_zero_sample(end_time, end_point, sample_style='multi'):
+    if sample_style == 'multi':
+        base_sample = torch.rand(end_time.shape, device=end_time.device, dtype=end_time.dtype)
+    elif sample_style == 'single':
+        base_sample = torch.rand(1, device=end_time.device, dtype=end_time.dtype)
+    else:
+        raise Exception(f"Unknown sample style {sample_style}")
     return inverse_brownian_bridge_max_starting_from_zero_cdf(base_sample, end_time, end_point)
 
 ################
 # Sample of min
 ################
-def brownian_bridge_min_starting_from_zero_sample(end_time, end_point):
+def brownian_bridge_min_starting_from_zero_sample(end_time, end_point, sample_style='multi'):
     # Any path will be at its minimum when the negative of that path is at its maximum, meaning
     # our answer is the negative max of our negative
-    return -1 * brownian_bridge_max_starting_from_zero_sample(end_time, -end_point)
+    return -1 * brownian_bridge_max_starting_from_zero_sample(end_time, -end_point, sample_style)
