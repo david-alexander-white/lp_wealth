@@ -1,5 +1,5 @@
 import numpy as np
-from lp_wealth import *
+from ..lp_wealth import *
 
 
 def test_log_market_price(cuda=False):
