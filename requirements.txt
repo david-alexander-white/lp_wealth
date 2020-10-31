@@ -1,0 +1,5 @@
+seaborn
+numpy
+scipy
+pytorch
+pytorch-lightning
