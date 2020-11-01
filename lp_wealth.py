@@ -53,7 +53,7 @@ class Sim:
     def get_log_r_beta(self):
         return self.initial_log_r_beta + self.log_r_beta_high_updates + self.log_r_beta_low_updates
 
-    def get_next_normal_noise(self, sample_style='multi'):
+    def get_next_noise(self, sample_style='multi'):
         if sample_style == 'multi':
             return torch.randn(self.num_samples, device=self.mu.device, dtype=self.mu.dtype)
         elif sample_style == 'single':
@@ -61,15 +61,15 @@ class Sim:
         else:
             return "unknown sample style"
 
-    def get_log_market_price_step(self, normal_noise):
-        return (self.mu - self.sigma**2 / 2) * self.time_step_size + self.sigma * normal_noise * torch.sqrt(self.time_step_size)
+    def get_log_market_price_step(self, noise):
+        return (self.mu - self.sigma**2 / 2) * self.time_step_size + self.sigma * noise * torch.sqrt(self.time_step_size)
 
     def step_time(self, brownian_bridge_adjustment="sample", sample_style='multi'):
         with torch.no_grad():
-            normal_noise = self.get_next_normal_noise(sample_style)
+            noise = self.get_next_noise(sample_style)
 
             log_r_alpha_low_updated, log_r_beta_low_updated, log_r_alpha_high_updated, log_r_beta_high_updated \
-                = self.calculate_reserve_update(normal_noise, brownian_bridge_adjustment=brownian_bridge_adjustment, sample_style=sample_style)
+                = self.calculate_reserve_update(noise, brownian_bridge_adjustment=brownian_bridge_adjustment, sample_style=sample_style)
 
             # Updates
             self.step += 1
@@ -83,7 +83,7 @@ class Sim:
             self.log_r_beta_low_updates = log_r_beta_low_updated
             self.log_r_beta_high_updates = log_r_beta_high_updated
 
-            self.log_market_price += self.get_log_market_price_step(normal_noise)
+            self.log_market_price += self.get_log_market_price_step(noise)
 
     def calculate_reserve_update(self, raw_normal_noise, brownian_bridge_adjustment="sample", sample_style='multi'):
         log_m_u = self.get_log_r_beta() - self.get_log_r_alpha()
