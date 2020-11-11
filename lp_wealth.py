@@ -47,11 +47,20 @@ class Sim:
         self.last_normal_noise = None
         self.last_expected_log_market_price = None
 
+        self.last_r_alpha = torch.exp(self.initial_log_r_alpha)
+        self.last_r_beta = torch.exp(self.initial_log_r_beta)
+
     def get_log_r_alpha(self):
         return self.initial_log_r_alpha + self.log_r_alpha_high_updates + self.log_r_alpha_low_updates
 
     def get_log_r_beta(self):
         return self.initial_log_r_beta + self.log_r_beta_high_updates + self.log_r_beta_low_updates
+
+    def get_r_alpha(self):
+        return torch.exp(self.get_log_r_alpha())
+
+    def get_r_beta(self):
+        return torch.exp(self.get_log_r_beta())
 
     def get_next_noise(self, sample_style='multi'):
         if sample_style == 'multi':
@@ -64,15 +73,23 @@ class Sim:
     def get_log_market_price_step(self, noise):
         return (self.mu - self.sigma**2 / 2) * self.time_step_size + self.sigma * noise * torch.sqrt(self.time_step_size)
 
-    def step_time(self, brownian_bridge_adjustment="sample", sample_style='multi'):
+    def step_time(self, brownian_bridge_adjustment="sample", sample_style='multi', provided_noise=None):
+        if provided_noise:
+            assert brownian_bridge_adjustment == 'none' and sample_style == 'provided'
+
+        self.last_r_alpha = self.get_r_alpha()
+        self.last_r_beta = self.get_r_beta()
+
         with torch.no_grad():
-            noise = self.get_next_noise(sample_style)
+            noise = self.get_next_noise(sample_style) if provided_noise is None else provided_noise
 
             log_r_alpha_low_updated, log_r_beta_low_updated, log_r_alpha_high_updated, log_r_beta_high_updated \
                 = self.calculate_reserve_update(noise, brownian_bridge_adjustment=brownian_bridge_adjustment, sample_style=sample_style)
 
             # Updates
             self.step += 1
+
+            self.log_market_price += self.get_log_market_price_step(noise)
 
             self.trade_count += torch.max(self.log_r_alpha_high_updates != log_r_alpha_high_updated,
                                 self.log_r_alpha_low_updates != log_r_alpha_low_updated)
@@ -83,7 +100,7 @@ class Sim:
             self.log_r_beta_low_updates = log_r_beta_low_updated
             self.log_r_beta_high_updates = log_r_beta_high_updated
 
-            self.log_market_price += self.get_log_market_price_step(noise)
+            return
 
     def calculate_reserve_update(self, raw_normal_noise, brownian_bridge_adjustment="sample", sample_style='multi'):
         log_m_u = self.get_log_r_beta() - self.get_log_r_alpha()
@@ -147,15 +164,11 @@ class Sim:
 
         return (scaled_log_wealth + self.get_log_r_beta()).cpu()
 
-    def compute_zero_sigma_log_r_beta(self):
-        return (1/(1+self.gamma) * (torch.log(self.gamma) + self.initial_log_r_alpha + self.gamma * self.initial_log_r_beta).cpu() + self.mu.cpu() * self.compute_elapsed_time())
+    def compute_log_amm_price(self):
+        return (self.get_log_r_beta() - self.get_log_r_alpha()).cpu()
 
-    # What log wealth would be if there was no volatility
-    def compute_zero_sigma_log_wealth(self):
-        return torch.log((self.gamma + 1) / self.gamma).cpu() + \
-               1/(1 + self.gamma).cpu() * ((self.log_gamma + self.initial_log_r_alpha + self.gamma * self.initial_log_r_beta).cpu() + \
-                                     self.mu.cpu() * self.compute_elapsed_time())
-
+    def compute_wealth(self):
+        return torch.exp(self.compute_log_wealth())
 
     def compute_elapsed_time(self):
         return (self.step * self.time_step_size).cpu()
