@@ -1,7 +1,16 @@
 import time
 import torch
 
-def sim_loop(sim, num_steps, bb_adjustment_type="sample", sample_style="multi"):
+
+class Checkpoint:
+    def __init__(self, sim):
+        self.time = torch.clone(sim.compute_elapsed_time())
+        self.market_price = torch.clone(torch.exp(sim.log_market_price))
+        self.wealth_growth_rate = torch.clone(sim.compute_wealth_growth_rate())
+        self.wealth = torch.clone(sim.compute_wealth())
+
+
+def sim_loop(sim, num_steps, bb_adjustment_type="sample", sample_style="multi", num_checkpoints=10):
     checkpoints = []
     start = time.time()
     for i in range(num_steps):
@@ -9,7 +18,8 @@ def sim_loop(sim, num_steps, bb_adjustment_type="sample", sample_style="multi"):
             now = time.time()
             print(i, (now - start))
             start = now
-            checkpoints.append(torch.clone(sim.compute_wealth_growth_rate()))
+        if int(num_steps / num_checkpoints) <= 1 or i % int(num_steps / num_checkpoints) == 1:
+            checkpoints.append(Checkpoint(sim))
         sim.step_time(bb_adjustment_type, sample_style=sample_style)
     return checkpoints
 
