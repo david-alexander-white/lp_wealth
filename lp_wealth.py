@@ -176,6 +176,11 @@ class Sim:
     def compute_wealth_growth_rate(self):
         return self.compute_log_wealth() / self.compute_elapsed_time()
 
+    # See https://math.dartmouth.edu/~mtassy/articles/AMM_returns.pdf
+    def predict_wealth_growth_rate(self):
+        d = self.mu - self.sigma ** 2 / 2
+        return d/2 * ((1 + self.gamma**(4 * d/self.sigma**2))/(1 - self.gamma**(4 * d/self.sigma**2))*(1-self.gamma)/(1+self.gamma)+1)
+
     def compute_trade_rate(self):
         return self.trade_count.cpu() / self.compute_elapsed_time()
 
