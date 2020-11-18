@@ -179,7 +179,16 @@ class Sim:
     # See https://math.dartmouth.edu/~mtassy/articles/AMM_returns.pdf
     def predict_wealth_growth_rate(self):
         d = self.mu - self.sigma ** 2 / 2
-        return d/2 * ((1 + self.gamma**(4 * d/self.sigma**2))/(1 - self.gamma**(4 * d/self.sigma**2))*(1-self.gamma)/(1+self.gamma)+1)
+        typical = d/2 * ((1 + self.gamma**(4 * d/self.sigma**2))/(1 - self.gamma**(4 * d/self.sigma**2))*(1-self.gamma)/(1+self.gamma)+1)
+        no_drift = self.sigma**2 / 4 / self.log_gamma * (self.gamma - 1) / (self.gamma + 1)
+        gamma_one = .5*(self.mu - self.sigma**2/2)
+        gamma_zero = torch.max(self.mu - self.sigma**2/2, torch.tensor(0.))
+
+        drift_or_no = torch.where(d == 0, no_drift, typical)
+
+        nonzero_gamma = torch.where(self.gamma == 0, gamma_zero, drift_or_no)
+
+        return torch.where(self.gamma == 1, gamma_one, nonzero_gamma)
 
     def compute_trade_rate(self):
         return self.trade_count.cpu() / self.compute_elapsed_time()
